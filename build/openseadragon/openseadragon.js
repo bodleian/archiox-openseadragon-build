@@ -1,6 +1,6 @@
-//! openseadragon 4.1.1
-//! Built on 2024-06-18
-//! Git commit: --fcf729db
+//! openseadragon 5.0.0
+//! Built on 2024-11-06
+//! Git commit: --2b010a9a-dirty
 //! http://openseadragon.github.io
 //! License: http://openseadragon.github.io/license/
 
@@ -90,7 +90,7 @@
 
 /**
  * @namespace OpenSeadragon
- * @version openseadragon 4.1.1
+ * @version openseadragon 5.0.0
  * @classdesc The root namespace for OpenSeadragon.  All utility methods
  * and classes are defined on or below this namespace.
  *
@@ -245,6 +245,11 @@
   *
   * @property {Boolean} [flipped=false]
   *     Initial flip state.
+  *
+  * @property {Boolean} [overlayPreserveContentDirection=true]
+  *     When the viewport is flipped (by pressing 'f'), the overlay is flipped using ScaleX.
+  *     Normally, this setting (default true) keeps the overlay's content readable by flipping it back.
+  *     To make the content flip with the overlay, set overlayPreserveContentDirection to false.
   *
   * @property {Number} [minZoomLevel=null]
   *
@@ -851,10 +856,10 @@ function OpenSeadragon( options ){
      * @since 1.0.0
      */
     $.version = {
-        versionStr: '4.1.1',
-        major: parseInt('4', 10),
-        minor: parseInt('1', 10),
-        revision: parseInt('1', 10)
+        versionStr: '5.0.0',
+        major: parseInt('5', 10),
+        minor: parseInt('0', 10),
+        revision: parseInt('0', 10)
     };
 
 
@@ -1070,8 +1075,9 @@ function OpenSeadragon( options ){
     /**
      * A ratio comparing the device screen's pixel density to the canvas's backing store pixel density,
      * clamped to a minimum of 1. Defaults to 1 if canvas isn't supported by the browser.
-     * @member {Number} pixelDensityRatio
+     * @function getCurrentPixelDensityRatio
      * @memberof OpenSeadragon
+     * @returns {Number}
      */
     $.getCurrentPixelDensityRatio = function() {
         if ( $.supportsCanvas ) {
@@ -1089,6 +1095,8 @@ function OpenSeadragon( options ){
     };
 
     /**
+     * A ratio comparing the device screen's pixel density to the canvas's backing store pixel density,
+     * clamped to a minimum of 1. Defaults to 1 if canvas isn't supported by the browser.
      * @member {Number} pixelDensityRatio
      * @memberof OpenSeadragon
      */
@@ -1362,7 +1370,8 @@ function OpenSeadragon( options ){
             degrees:                    0,
 
             // INITIAL FLIP STATE
-            flipped:                    false,
+            flipped:                          false,
+            overlayPreserveContentDirection:  true,
 
             // APPEARANCE
             opacity:                           1, // to be passed into each TiledImage
@@ -2349,43 +2358,18 @@ function OpenSeadragon( options ){
         /**
          * Create an XHR object
          * @private
-         * @param {type} [local] If set to true, the XHR will be file: protocol
-         * compatible if possible (but may raise a warning in the browser).
+         * @param {type} [local] Deprecated. Ignored (IE/ActiveXObject file protocol no longer supported).
          * @returns {XMLHttpRequest}
          */
-        createAjaxRequest: function( local ) {
-            // IE11 does not support window.ActiveXObject so we just try to
-            // create one to see if it is supported.
-            // See: http://msdn.microsoft.com/en-us/library/ie/dn423948%28v=vs.85%29.aspx
-            var supportActiveX;
-            try {
-                /* global ActiveXObject:true */
-                supportActiveX = !!new ActiveXObject( "Microsoft.XMLHTTP" );
-            } catch( e ) {
-                supportActiveX = false;
-            }
-
-            if ( supportActiveX ) {
-                if ( window.XMLHttpRequest ) {
-                    $.createAjaxRequest = function( local ) {
-                        if ( local ) {
-                            return new ActiveXObject( "Microsoft.XMLHTTP" );
-                        }
-                        return new XMLHttpRequest();
-                    };
-                } else {
-                    $.createAjaxRequest = function() {
-                        return new ActiveXObject( "Microsoft.XMLHTTP" );
-                    };
-                }
-            } else if ( window.XMLHttpRequest ) {
+        createAjaxRequest: function() {
+            if ( window.XMLHttpRequest ) {
                 $.createAjaxRequest = function() {
                     return new XMLHttpRequest();
                 };
+                return new XMLHttpRequest();
             } else {
                 throw new Error( "Browser doesn't support XMLHttpRequest." );
             }
-            return $.createAjaxRequest( local );
         },
 
         /**
@@ -2421,7 +2405,7 @@ function OpenSeadragon( options ){
             }
 
             var protocol = $.getUrlProtocol( url );
-            var request = $.createAjaxRequest( protocol === "file:" );
+            var request = $.createAjaxRequest();
 
             if ( !$.isFunction( onSuccess ) ) {
                 throw new Error( "makeAjaxRequest requires a success callback" );
@@ -2590,17 +2574,6 @@ function OpenSeadragon( options ){
                     return xmlDoc;
                 };
 
-            } else if ( window.ActiveXObject ) {
-
-                $.parseXml = function( string ) {
-                    var xmlDoc = null;
-
-                    xmlDoc = new ActiveXObject( "Microsoft.XMLDOM" );
-                    xmlDoc.async = false;
-                    xmlDoc.loadXML( string );
-                    return xmlDoc;
-                };
-
             } else {
                 throw new Error( "Browser doesn't support XML DOM." );
             }
@@ -2727,6 +2700,10 @@ function OpenSeadragon( options ){
         //console.error( 'appVersion: ' + navigator.appVersion );
         //console.error( 'userAgent: ' + navigator.userAgent );
 
+        //TODO navigator.appName is deprecated. Should be 'Netscape' for all browsers
+        //  but could be dropped at any time
+        //  See https://developer.mozilla.org/en-US/docs/Web/API/Navigator/appName
+        //      https://developer.mozilla.org/en-US/docs/Web/HTTP/Browser_detection_using_the_user_agent
         switch( navigator.appName ){
             case "Microsoft Internet Explorer":
                 if( !!window.attachEvent &&
@@ -2812,8 +2789,8 @@ function OpenSeadragon( options ){
         //determine if this browser supports element.style.opacity
         $.Browser.opacity = true;
 
-        if ( $.Browser.vendor === $.BROWSERS.IE && $.Browser.version < 11 ) {
-            $.console.error('Internet Explorer versions < 11 are not supported by OpenSeadragon');
+        if ( $.Browser.vendor === $.BROWSERS.IE ) {
+            $.console.error('Internet Explorer is not supported by OpenSeadragon');
         }
     })();
 
@@ -4663,10 +4640,9 @@ $.EventSource.prototype = {
     /**
      * Detect available mouse wheel event name.
      */
-    $.MouseTracker.wheelEventName = ( $.Browser.vendor === $.BROWSERS.IE && $.Browser.version > 8 ) ||
-                                                ( 'onwheel' in document.createElement( 'div' ) ) ? 'wheel' : // Modern browsers support 'wheel'
-                                    document.onmousewheel !== undefined ? 'mousewheel' :                     // Webkit and IE support at least 'mousewheel'
-                                    'DOMMouseScroll';                                                        // Assume old Firefox
+    $.MouseTracker.wheelEventName = ( 'onwheel' in document.createElement( 'div' ) ) ? 'wheel' : // Modern browsers support 'wheel'
+                                    document.onmousewheel !== undefined ? 'mousewheel' :         // Webkit (and unsupported IE) support at least 'mousewheel'
+                                    'DOMMouseScroll';                                            // Assume old Firefox (deprecated)
 
     /**
      * Detect browser pointer device event model(s) and build appropriate list of events to subscribe to.
@@ -4679,7 +4655,7 @@ $.EventSource.prototype = {
     }
 
     if ( window.PointerEvent ) {
-        // IE11 and other W3C Pointer Event implementations (see http://www.w3.org/TR/pointerevents)
+        // W3C Pointer Event implementations (see http://www.w3.org/TR/pointerevents)
         $.MouseTracker.havePointerEvents = true;
         $.MouseTracker.subscribeEvents.push( "pointerenter", "pointerleave", "pointerover", "pointerout", "pointerdown", "pointerup", "pointermove", "pointercancel" );
         // Pointer events capture support
@@ -5218,7 +5194,6 @@ $.EventSource.prototype = {
 
     /**
      * Gets a W3C Pointer Events model compatible pointer type string from a DOM pointer event.
-     * IE10 used a long integer value, but the W3C specification (and IE11+) use a string "mouse", "touch", "pen", etc.
      *
      * Note: Called for both pointer events and legacy mouse events
      *         ($.MouseTracker.havePointerEvents determines which)
@@ -5226,14 +5201,7 @@ $.EventSource.prototype = {
      * @inner
      */
     function getPointerType( event ) {
-        if ( $.MouseTracker.havePointerEvents ) {
-            // Note: IE pointer events bug - sends invalid pointerType on lostpointercapture events
-            //    and possibly other events. We rely on sane, valid property values in DOM events, so for
-            //    IE, when the pointerType is missing, we'll default to 'mouse'...should be right most of the time
-            return event.pointerType || (( $.Browser.vendor === $.BROWSERS.IE ) ? 'mouse' : '');
-        } else {
-            return 'mouse';
-        }
+        return $.MouseTracker.havePointerEvents && event.pointerType ? event.pointerType : 'mouse';
     }
 
 
@@ -6101,15 +6069,14 @@ $.EventSource.prototype = {
         };
 
         // Most browsers implicitly capture touch pointer events
-        // Note no IE versions have element.hasPointerCapture() so no implicit
-        //    pointer capture possible
+        // Note no IE versions (unsupported) have element.hasPointerCapture() so
+        //    no implicit pointer capture possible
         // var implicitlyCaptured = ($.MouseTracker.havePointerEvents &&
         //                         event.target.hasPointerCapture &&
         //                         $.Browser.vendor !== $.BROWSERS.IE) ?
         //                         event.target.hasPointerCapture(event.pointerId) : false;
         var implicitlyCaptured = $.MouseTracker.havePointerEvents &&
-                                gPoint.type === 'touch' &&
-                                $.Browser.vendor !== $.BROWSERS.IE;
+                                gPoint.type === 'touch';
 
         //$.console.log('pointerdown ' + (tracker.userData ? tracker.userData.toString() : '') + ' ' + (event.target === tracker.element ? 'tracker.element' : ''));
 
@@ -7519,11 +7486,7 @@ $.Control.prototype = {
      * @param {Number} opactiy - a value between 1 and 0 inclusively.
      */
     setOpacity: function( opacity ) {
-        if ( this.element[ $.SIGNAL ] && $.Browser.vendor === $.BROWSERS.IE ) {
-            $.setElementOpacity( this.element, opacity, true );
-        } else {
-            $.setElementOpacity( this.wrapper, opacity, true );
-        }
+        $.setElementOpacity( this.wrapper, opacity, true );
     }
 };
 
@@ -8301,24 +8264,25 @@ $.Viewer = function( options ) {
 
     // Create the viewport
     this.viewport = new $.Viewport({
-        containerSize:              THIS[ this.hash ].prevContainerSize,
-        springStiffness:            this.springStiffness,
-        animationTime:              this.animationTime,
-        minZoomImageRatio:          this.minZoomImageRatio,
-        maxZoomPixelRatio:          this.maxZoomPixelRatio,
-        visibilityRatio:            this.visibilityRatio,
-        wrapHorizontal:             this.wrapHorizontal,
-        wrapVertical:               this.wrapVertical,
-        defaultZoomLevel:           this.defaultZoomLevel,
-        minZoomLevel:               this.minZoomLevel,
-        maxZoomLevel:               this.maxZoomLevel,
-        viewer:                     this,
-        degrees:                    this.degrees,
-        flipped:                    this.flipped,
-        navigatorRotate:            this.navigatorRotate,
-        homeFillsViewer:            this.homeFillsViewer,
-        margins:                    this.viewportMargins,
-        silenceMultiImageWarnings:  this.silenceMultiImageWarnings
+        containerSize:                      THIS[ this.hash ].prevContainerSize,
+        springStiffness:                    this.springStiffness,
+        animationTime:                      this.animationTime,
+        minZoomImageRatio:                  this.minZoomImageRatio,
+        maxZoomPixelRatio:                  this.maxZoomPixelRatio,
+        visibilityRatio:                    this.visibilityRatio,
+        wrapHorizontal:                     this.wrapHorizontal,
+        wrapVertical:                       this.wrapVertical,
+        defaultZoomLevel:                   this.defaultZoomLevel,
+        minZoomLevel:                       this.minZoomLevel,
+        maxZoomLevel:                       this.maxZoomLevel,
+        viewer:                             this,
+        degrees:                            this.degrees,
+        flipped:                            this.flipped,
+        overlayPreserveContentDirection:    this.overlayPreserveContentDirection,
+        navigatorRotate:                    this.navigatorRotate,
+        homeFillsViewer:                    this.homeFillsViewer,
+        margins:                            this.viewportMargins,
+        silenceMultiImageWarnings:          this.silenceMultiImageWarnings
     });
 
     this.viewport._setContentBounds(this.world.getHomeBounds(), this.world.getContentFactor());
@@ -12156,7 +12120,6 @@ $.Navigator = function( options ){
         style['float']      = 'left'; //Webkit
 
         style.cssFloat      = 'left'; //Firefox
-        style.styleFloat    = 'left'; //IE
         style.zIndex        = 999999999;
         style.cursor        = 'default';
         style.boxSizing     = 'content-box';
@@ -16019,6 +15982,7 @@ function configureFromObject( tileSource, configuration ){
                         * @memberof OpenSeadragon.Viewer
                         * @type {object}
                         * @property {CanvasRenderingContext2D} context2D - The context that is being unloaded
+                        * @private
                         */
                         viewer.raiseEvent("image-unloaded", {
                             context2D: this.levels[i].context2D
@@ -16243,13 +16207,6 @@ $.Button = function( options ) {
         this.imgHover.style.visibility =
         this.imgDown.style.visibility  =
             "hidden";
-
-        if ($.Browser.vendor === $.BROWSERS.FIREFOX && $.Browser.version < 3) {
-            this.imgGroup.style.top =
-            this.imgHover.style.top =
-            this.imgDown.style.top  =
-                "";
-        }
 
         this.element.appendChild( this.imgRest );
         this.element.appendChild( this.imgGroup );
@@ -17538,7 +17495,6 @@ $.ReferenceStrip = function ( options ) {
         element.style.display       = 'inline';
         element.style['float']      = 'left'; //Webkit
         element.style.cssFloat      = 'left'; //Firefox
-        element.style.styleFloat    = 'left'; //IE
         element.style.padding       = '2px';
         $.setElementTouchActionNone( element );
         $.setElementPointerEventsNone( element );
@@ -19088,8 +19044,17 @@ $.Tile.prototype = {
             };
         }
 
+        this.elementWrapper = document.createElement('div');
         this.element = options.element;
-        this.style = options.element.style;
+        this.elementWrapper.appendChild(this.element);
+
+        if (this.element.id) {
+            this.elementWrapper.id = "overlay-wrapper-" + this.element.id;
+        } else {
+            this.elementWrapper.id = "overlay-wrapper";
+        }
+
+        this.style = this.elementWrapper.style;
         this._init(options);
     };
 
@@ -19156,7 +19121,7 @@ $.Tile.prototype = {
          * @function
          */
         destroy: function() {
-            var element = this.element;
+            var element = this.elementWrapper;
             var style = this.style;
 
             if (element.parentNode) {
@@ -19201,7 +19166,7 @@ $.Tile.prototype = {
          * @param {Element} container
          */
         drawHTML: function(container, viewport) {
-            var element = this.element;
+            var element = this.elementWrapper;
             if (element.parentNode !== container) {
                 //save the source parent for later if we need it
                 element.prevElementParent = element.parentNode;
@@ -19212,53 +19177,57 @@ $.Tile.prototype = {
                 this.style.position = "absolute";
                 // this.size is used by overlays which don't get scaled in at
                 // least one direction when this.checkResize is set to false.
-                this.size = $.getElementSize(element);
+                this.size = $.getElementSize(this.elementWrapper);
             }
-
             var positionAndSize = this._getOverlayPositionAndSize(viewport);
-
             var position = positionAndSize.position;
             var size = this.size = positionAndSize.size;
-            var rotate;
-            var scale = "";
-            if (viewport.flipped){
-                rotate = -positionAndSize.rotate;
-                scale = " scaleX(-1)";
+            var outerScale = "";
+            if (viewport.overlayPreserveContentDirection) {
+                outerScale = viewport.flipped ? " scaleX(-1)" : " scaleX(1)";
             }
-            else {
-                rotate = positionAndSize.rotate;
-            }
+            var rotate = viewport.flipped ? -positionAndSize.rotate : positionAndSize.rotate;
+            var scale = viewport.flipped ? " scaleX(-1)" : "";
             // call the onDraw callback if it exists to allow one to overwrite
             // the drawing/positioning/sizing of the overlay
             if (this.onDraw) {
                 this.onDraw(position, size, this.element);
             } else {
                 var style = this.style;
+                var innerStyle = this.element.style;
+                innerStyle.display = "block";
                 style.left = position.x + "px";
                 style.top = position.y + "px";
                 if (this.width !== null) {
-                    style.width = size.x + "px";
+                    innerStyle.width = size.x + "px";
                 }
                 if (this.height !== null) {
-                    style.height = size.y + "px";
+                    innerStyle.height = size.y + "px";
                 }
                 var transformOriginProp = $.getCssPropertyWithVendorPrefix(
                     'transformOrigin');
                 var transformProp = $.getCssPropertyWithVendorPrefix(
                     'transform');
                 if (transformOriginProp && transformProp) {
-                    if (rotate) {
+                    if (rotate && !viewport.flipped) {
+                        innerStyle[transformProp] = "";
+                        style[transformOriginProp] = this._getTransformOrigin();
+                        style[transformProp] = "rotate(" + rotate + "deg)";
+                    } else if (!rotate && viewport.flipped) {
+                        innerStyle[transformProp] = outerScale;
+                        style[transformOriginProp] = this._getTransformOrigin();
+                        style[transformProp] = scale;
+                    } else if (rotate && viewport.flipped){
+                        innerStyle[transformProp] = outerScale;
                         style[transformOriginProp] = this._getTransformOrigin();
                         style[transformProp] = "rotate(" + rotate + "deg)" + scale;
-                    } else if (!rotate && viewport.flipped) {
-                        style[transformOriginProp] = this._getTransformOrigin();
-                        style[transformProp] = "scaleX(-1)";
                     } else {
+                        innerStyle[transformProp] = "";
                         style[transformOriginProp] = "";
                         style[transformProp] = "";
                     }
                 }
-                style.display = 'block';
+                style.display = 'flex';
             }
         },
 
@@ -19278,9 +19247,6 @@ $.Tile.prototype = {
                     var rect = new $.Rect(position.x, position.y, size.x, size.y);
                     var boundingBox = this._getBoundingBox(rect, viewport.getRotation(true));
                     position = boundingBox.getTopLeft();
-                    if (viewport.flipped){
-                        position.x = (viewport.getContainerSize().x - position.x);
-                    }
                     size = boundingBox.getSize();
                 } else {
                     rotate = viewport.getRotation(true);
@@ -19313,7 +19279,7 @@ $.Tile.prototype = {
             }
             if (this.checkResize &&
                 (this.width === null || this.height === null)) {
-                var eltSize = this.size = $.getElementSize(this.element);
+                var eltSize = this.size = $.getElementSize(this.elementWrapper);
                 if (this.width === null) {
                     width = eltSize.x;
                 }
@@ -21265,6 +21231,7 @@ function determineSubPixelRoundingRule(subPixelRoundingRules) {
             // unbind our event listeners from the viewer
             this.viewer.removeHandler("tile-ready", this._boundToTileReady);
             this.viewer.removeHandler("image-unloaded", this._boundToImageUnloaded);
+            this.viewer.removeHandler("resize", this._resizeHandler);
 
             // set our webgl context reference to null to enable garbage collection
             this._gl = null;
@@ -21300,7 +21267,7 @@ function determineSubPixelRoundingRule(subPixelRoundingRules) {
             let canvasElement = document.createElement( 'canvas' );
             let webglContext = $.isFunction( canvasElement.getContext ) &&
                         canvasElement.getContext( 'webgl' );
-            let ext = webglContext.getExtension('WEBGL_lose_context');
+            let ext = webglContext && webglContext.getExtension('WEBGL_lose_context');
             if(ext){
                 ext.loseContext();
             }
@@ -21944,8 +21911,7 @@ function determineSubPixelRoundingRule(subPixelRoundingRules) {
 
             this._gl = this._renderingCanvas.getContext('webgl');
 
-            //make the additional canvas elements mirror size changes to the output canvas
-            this.viewer.addHandler("resize", function(){
+            this._resizeHandler = function(){
 
                 if(_this._outputCanvas !== _this.viewer.drawer.canvas){
                     _this._outputCanvas.style.width = _this.viewer.drawer.canvas.clientWidth + 'px';
@@ -21966,7 +21932,10 @@ function determineSubPixelRoundingRule(subPixelRoundingRules) {
 
                 // important - update the size of the rendering viewport!
                 _this._resizeRenderer();
-            });
+            };
+
+            //make the additional canvas elements mirror size changes to the output canvas
+            this.viewer.addHandler("resize", this._resizeHandler);
         }
 
         // private
@@ -24337,8 +24306,8 @@ $.Viewport.prototype = {
  * @param {Boolean} [options.iOSDevice] - See {@link OpenSeadragon.Options}.
  * @param {Number} [options.opacity=1] - Set to draw at proportional opacity. If zero, images will not draw.
  * @param {Boolean} [options.preload=false] - Set true to load even when the image is hidden by zero opacity.
- * @param {String} [options.compositeOperation] - How the image is composited onto other images; see compositeOperation in {@link OpenSeadragon.Options} for possible
- values.
+ * @param {String} [options.compositeOperation] - How the image is composited onto other images;
+ * see compositeOperation in {@link OpenSeadragon.Options} for possible values.
  * @param {Boolean} [options.debugMode] - See {@link OpenSeadragon.Options}.
  * @param {String|CanvasGradient|CanvasPattern|Function} [options.placeholderFillStyle] - See {@link OpenSeadragon.Options}.
  * @param {String|Boolean} [options.crossOriginPolicy] - See {@link OpenSeadragon.Options}.
@@ -25346,7 +25315,7 @@ $.extend($.TiledImage.prototype, $.EventSource.prototype, /** @lends OpenSeadrag
         // _tilesToDraw might have been updated by the update; refresh it
         tileArray = this._tilesToDraw.flat();
 
-         // mark the tiles as being drawn, so that they won't be discarded from
+        // mark the tiles as being drawn, so that they won't be discarded from
         // the tileCache
         tileArray.forEach(tileInfo => {
             tileInfo.tile.beingDrawn = true;
@@ -25577,10 +25546,9 @@ $.extend($.TiledImage.prototype, $.EventSource.prototype, /** @lends OpenSeadrag
     // returns boolean flag of whether the image should be marked as fully loaded
     _updateLevelsForViewport: function(){
         var levelsInterval = this._getLevelsInterval();
-        var lowestLevel = levelsInterval.lowestLevel;
-        var highestLevel = levelsInterval.highestLevel;
+        var lowestLevel = levelsInterval.lowestLevel; // the lowest level we should draw at our current zoom
+        var highestLevel = levelsInterval.highestLevel; // the highest level we should draw at our current zoom
         var bestTiles = [];
-        var haveDrawn = false;
         var drawArea = this.getDrawArea();
         var currentTime = $.now();
 
@@ -25604,6 +25572,7 @@ $.extend($.TiledImage.prototype, $.EventSource.prototype, /** @lends OpenSeadrag
         for(let i = 0, level = highestLevel; level >= lowestLevel; level--, i++){
             levelList[i] = level;
         }
+
         // if a single-tile level is loaded, add that to the end of the list
         // as a fallback to use during zooming out, until a lower-res tile is
         // loaded
@@ -25615,32 +25584,32 @@ $.extend($.TiledImage.prototype, $.EventSource.prototype, /** @lends OpenSeadrag
             );
             if(tile && tile.isBottomMost && tile.isRightMost && tile.loaded){
                 levelList.push(level);
-                levelList.hasHigherResolutionFallback = true;
                 break;
             }
         }
 
 
-        // Update any level that will be drawn
+        // Update any level that will be drawn.
+        // We are iterating from highest resolution to lowest resolution
+        // Once a level fully covers the viewport the loop is halted and
+        // lower-resolution levels are skipped
+        let useLevel = false;
         for (let i = 0; i < levelList.length; i++) {
             let level = levelList[i];
-            var drawLevel = false;
 
-            //Avoid calculations for draw if we have already drawn this
             var currentRenderPixelRatio = this.viewport.deltaPixelsFromPointsNoRotate(
                 this.source.getPixelRatio(level),
                 true
             ).x * this._scaleSpring.current.value;
 
-            if (i === levelList.length - 1 ||
-                (!haveDrawn && currentRenderPixelRatio >= this.minPixelRatio) ) {
-                drawLevel = true;
-                haveDrawn = true;
-            } else if (!haveDrawn) {
+            // make sure we skip levels until currentRenderPixelRatio becomes >= minPixelRatio
+            // but always use the last level in the list so we draw something
+            if (i === levelList.length - 1 || currentRenderPixelRatio >= this.minPixelRatio ) {
+                useLevel = true;
+            } else if (!useLevel) {
                 continue;
             }
 
-            //Perform calculations for draw if we haven't drawn this
             var targetRenderPixelRatio = this.viewport.deltaPixelsFromPointsNoRotate(
                 this.source.getPixelRatio(level),
                 false
@@ -25663,10 +25632,7 @@ $.extend($.TiledImage.prototype, $.EventSource.prototype, /** @lends OpenSeadrag
             );
 
             // Update the level and keep track of 'best' tiles to load
-            // the bestTiles
             var result = this._updateLevel(
-                haveDrawn,
-                drawLevel,
                 level,
                 levelOpacity,
                 levelVisibility,
@@ -25823,8 +25789,6 @@ $.extend($.TiledImage.prototype, $.EventSource.prototype, /** @lends OpenSeadrag
     /**
      * Updates all tiles at a given resolution level.
      * @private
-     * @param {Boolean} haveDrawn
-     * @param {Boolean} drawLevel
      * @param {Number} level
      * @param {Number} levelOpacity
      * @param {Number} levelVisibility
@@ -25833,8 +25797,8 @@ $.extend($.TiledImage.prototype, $.EventSource.prototype, /** @lends OpenSeadrag
      * @param {OpenSeadragon.Tile[]} best Array of the current best tiles
      * @returns {Object} Dictionary {bestTiles: OpenSeadragon.Tile - the current "best" tiles to draw, updatedTiles: OpenSeadragon.Tile) - the updated tiles}.
      */
-    _updateLevel: function(haveDrawn, drawLevel, level, levelOpacity,
-                           levelVisibility, drawArea, currentTime, best) {
+    _updateLevel: function(level, levelOpacity,
+                            levelVisibility, drawArea, currentTime, best) {
 
         var topLeftBound = drawArea.getBoundingBox().getTopLeft();
         var bottomRightBound = drawArea.getBoundingBox().getBottomRight();
@@ -25848,7 +25812,7 @@ $.extend($.TiledImage.prototype, $.EventSource.prototype, /** @lends OpenSeadrag
              * @type {object}
              * @property {OpenSeadragon.Viewer} eventSource - A reference to the Viewer which raised the event.
              * @property {OpenSeadragon.TiledImage} tiledImage - Which TiledImage is being drawn.
-             * @property {Object} havedrawn
+             * @property {Object} havedrawn - deprecated, always true (kept for backwards compatibility)
              * @property {Object} level
              * @property {Object} opacity
              * @property {Object} visibility
@@ -25861,7 +25825,7 @@ $.extend($.TiledImage.prototype, $.EventSource.prototype, /** @lends OpenSeadrag
              */
             this.viewer.raiseEvent('update-level', {
                 tiledImage: this,
-                havedrawn: haveDrawn,
+                havedrawn: true, // deprecated, kept for backwards compatibility
                 level: level,
                 opacity: levelOpacity,
                 visibility: levelVisibility,
@@ -25916,8 +25880,6 @@ $.extend($.TiledImage.prototype, $.EventSource.prototype, /** @lends OpenSeadrag
                 }
 
                 var result = this._updateTile(
-                    drawLevel,
-                    haveDrawn,
                     flippedX, y,
                     level,
                     levelVisibility,
@@ -25994,8 +25956,6 @@ $.extend($.TiledImage.prototype, $.EventSource.prototype, /** @lends OpenSeadrag
     /**
      * Update a single tile at a particular resolution level.
      * @private
-     * @param {Boolean} haveDrawn
-     * @param {Boolean} drawLevel
      * @param {Number} x
      * @param {Number} y
      * @param {Number} level
@@ -26006,16 +25966,15 @@ $.extend($.TiledImage.prototype, $.EventSource.prototype, /** @lends OpenSeadrag
      * @param {OpenSeadragon.Tile} best - The current "best" tile to draw.
      * @returns {Object} Dictionary {bestTiles: OpenSeadragon.Tile[] - the current best tiles, tile: OpenSeadragon.Tile the current tile}
      */
-    _updateTile: function( haveDrawn, drawLevel, x, y, level,
-                           levelVisibility, viewportCenter, numberOfTiles, currentTime, best){
+    _updateTile: function( x, y, level,
+                            levelVisibility, viewportCenter, numberOfTiles, currentTime, best){
 
         var tile = this._getTile(
             x, y,
             level,
             currentTime,
             numberOfTiles
-            ),
-            drawTile = drawLevel;
+            );
 
         if( this.viewer ){
             /**
@@ -26048,20 +26007,6 @@ $.extend($.TiledImage.prototype, $.EventSource.prototype, /** @lends OpenSeadrag
         }
         if (tile.loaded && tile.opacity === 1){
             this._setCoverage( this.coverage, level, x, y, true );
-        }
-        if ( haveDrawn && !drawTile ) {
-            if ( this._isCovered( this.coverage, level, x, y ) ) {
-                this._setCoverage( this.coverage, level, x, y, true );
-            } else {
-                drawTile = true;
-            }
-        }
-
-        if ( !drawTile ) {
-            return {
-                bestTiles: best,
-                tile: tile
-            };
         }
 
         this._positionTile(
@@ -26365,6 +26310,7 @@ $.extend($.TiledImage.prototype, $.EventSource.prototype, /** @lends OpenSeadrag
                  * @property {OpenSeadragon.Tile} tile - The tile which has been loaded.
                  * @property {OpenSeadragon.TiledImage} tiledImage - The tiled image of the loaded tile.
                  * @property {XMLHttpRequest} tileRequest - The AJAX request that loaded this tile (if applicable).
+                 * @private
                  */
                 _this.viewer.raiseEvent("tile-ready", {
                     tile: tile,
@@ -26448,9 +26394,11 @@ $.extend($.TiledImage.prototype, $.EventSource.prototype, /** @lends OpenSeadrag
                 return -1;
             }
             if (a.visibility === b.visibility) {
+                // sort by smallest squared distance
                 return (a.squaredDistance - b.squaredDistance);
             } else {
-                return (a.visibility - b.visibility);
+                // sort by largest visibility value
+                return (b.visibility - a.visibility);
             }
         });
     },
@@ -26845,6 +26793,7 @@ $.TileCache.prototype = {
                  * @memberof OpenSeadragon.Viewer
                  * @type {object}
                  * @property {CanvasRenderingContext2D} context2D - The context that is being unloaded
+                 * @private
                  */
                 tiledImage.viewer.raiseEvent("image-unloaded", {
                     context2D: context2D,
